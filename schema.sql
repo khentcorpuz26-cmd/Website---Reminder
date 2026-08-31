@@ -1,13 +1,35 @@
 -- Ledger: task board schema for Supabase
--- Run this once in the Supabase SQL editor (Project > SQL Editor > New query)
+-- Run this in the Supabase SQL editor (Project > SQL Editor > New query)
+-- NOTE: this replaces the old fixed-status "tasks" table with a workspaces/groups
+-- model that supports multiple boards and custom columns. Safe to re-run.
 
 create extension if not exists "pgcrypto";
 
-create table if not exists tasks (
+drop table if exists tasks cascade;
+drop table if exists groups cascade;
+drop table if exists workspaces cascade;
+
+create table workspaces (
   id uuid primary key default gen_random_uuid(),
+  name text not null,
+  position int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table groups (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  name text not null,
+  is_done_group boolean not null default false,
+  position int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table tasks (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references groups(id) on delete cascade,
   title text not null,
   description text default '',
-  status text not null default 'todo' check (status in ('todo', 'in_progress', 'done')),
   priority text not null default 'normal' check (priority in ('low', 'normal', 'high')),
   due_date date,
   created_at timestamptz not null default now(),
@@ -33,18 +55,26 @@ create trigger tasks_set_updated_at
 -- This is a single-user personal tool. RLS is enabled below with an open
 -- policy for the anon key so the static site can read/write directly.
 -- Do NOT put this site's URL somewhere public/indexed — anyone with the
--- link and the anon key can read and edit your tasks. If you ever expose
+-- link and the anon key can read and edit your boards. If you ever expose
 -- this beyond yourself, swap this policy for real Supabase Auth.
+alter table workspaces enable row level security;
+alter table groups enable row level security;
 alter table tasks enable row level security;
 
-drop policy if exists "anon full access" on tasks;
-create policy "anon full access"
-  on tasks
-  for all
-  to anon
-  using (true)
-  with check (true);
+drop policy if exists "anon full access" on workspaces;
+create policy "anon full access" on workspaces for all to anon using (true) with check (true);
 
--- Helpful index for the reminder workflow's daily query
-create index if not exists tasks_status_idx on tasks (status);
-create index if not exists tasks_due_date_idx on tasks (due_date);
+drop policy if exists "anon full access" on groups;
+create policy "anon full access" on groups for all to anon using (true) with check (true);
+
+drop policy if exists "anon full access" on tasks;
+create policy "anon full access" on tasks for all to anon using (true) with check (true);
+
+-- Helpful indexes
+create index groups_workspace_idx on groups (workspace_id);
+create index tasks_group_idx on tasks (group_id);
+create index tasks_due_date_idx on tasks (due_date);
+
+-- The website auto-creates a default "My tasks" board with To do / In
+-- progress / Done groups on first load if no workspace exists yet, so no
+-- seed data is needed here.

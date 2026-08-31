@@ -45,14 +45,15 @@
 
     <div class="sidebar-section">
       <span class="sidebar-section-label">Workspace</span>
-      <a class="board-item active" href="#">My tasks</a>
+      <div id="workspaceList"></div>
+      <button class="board-item add-workspace-btn" id="addWorkspaceBtn">+ New board</button>
     </div>
   </aside>
 
   <div class="main">
     <header class="topbar">
       <div class="topbar-title">
-        <h1>My tasks</h1>
+        <h1 id="boardTitle">My tasks</h1>
         <span class="today-date" id="todayDate"></span>
       </div>
 
@@ -72,71 +73,7 @@
 
     <div class="board-scroll" id="boardScroll">
 
-      <section class="group" data-status="todo">
-        <div class="group-header">
-          <button class="group-toggle" aria-label="Collapse group"></button>
-          <span class="group-dot dot-todo"></span>
-          <h2>To do</h2>
-          <span class="group-count" id="count-todo">0</span>
-        </div>
-        <div class="group-body">
-          <div class="table-head-row">
-            <div class="col-check"></div>
-            <div class="col-item">Item</div>
-            <div class="col-avatar"></div>
-            <div class="col-status">Status</div>
-            <div class="col-due">Due date</div>
-            <div class="col-priority">Priority</div>
-          </div>
-          <div class="rows" id="rows-todo"></div>
-          <button class="add-item-row" data-status="todo">+ Add item</button>
-        </div>
-        <div class="group-bar bar-todo"></div>
-      </section>
-
-      <section class="group" data-status="in_progress">
-        <div class="group-header">
-          <button class="group-toggle" aria-label="Collapse group"></button>
-          <span class="group-dot dot-progress"></span>
-          <h2>In progress</h2>
-          <span class="group-count" id="count-in_progress">0</span>
-        </div>
-        <div class="group-body">
-          <div class="table-head-row">
-            <div class="col-check"></div>
-            <div class="col-item">Item</div>
-            <div class="col-avatar"></div>
-            <div class="col-status">Status</div>
-            <div class="col-due">Due date</div>
-            <div class="col-priority">Priority</div>
-          </div>
-          <div class="rows" id="rows-in_progress"></div>
-          <button class="add-item-row" data-status="in_progress">+ Add item</button>
-        </div>
-        <div class="group-bar bar-progress"></div>
-      </section>
-
-      <section class="group" data-status="done">
-        <div class="group-header">
-          <button class="group-toggle" aria-label="Collapse group"></button>
-          <span class="group-dot dot-done"></span>
-          <h2>Done</h2>
-          <span class="group-count" id="count-done">0</span>
-        </div>
-        <div class="group-body">
-          <div class="table-head-row">
-            <div class="col-check"></div>
-            <div class="col-item">Item</div>
-            <div class="col-avatar"></div>
-            <div class="col-status">Status</div>
-            <div class="col-due">Due date</div>
-            <div class="col-priority">Priority</div>
-          </div>
-          <div class="rows" id="rows-done"></div>
-          <button class="add-item-row" data-status="done">+ Add item</button>
-        </div>
-        <div class="group-bar bar-done"></div>
-      </section>
+      <div id="groupsContainer"></div>
 
       <button class="add-group-btn" id="addGroupBtn">+ Add new group</button>
 

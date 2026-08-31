@@ -1,16 +1,6 @@
 const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
-const STATUSES = ["todo", "in_progress", "done"];
-const rowsEls = {
-  todo: document.getElementById("rows-todo"),
-  in_progress: document.getElementById("rows-in_progress"),
-  done: document.getElementById("rows-done"),
-};
-const countEls = {
-  todo: document.getElementById("count-todo"),
-  in_progress: document.getElementById("count-in_progress"),
-  done: document.getElementById("count-done"),
-};
+const PALETTE = ["#9a9a9a", "#6ba5c9", "#c98b6b", "#8bc98f", "#c9c26b", "#a06bc9", "#c96b8f"];
 
 const modalOverlay = document.getElementById("modalOverlay");
 const modalTitle = document.getElementById("modalTitle");
@@ -28,9 +18,16 @@ const syncStatus = document.getElementById("syncStatus");
 const todayDateEl = document.getElementById("todayDate");
 const searchInput = document.getElementById("searchInput");
 const addGroupBtn = document.getElementById("addGroupBtn");
+const groupsContainer = document.getElementById("groupsContainer");
+const workspaceListEl = document.getElementById("workspaceList");
+const addWorkspaceBtn = document.getElementById("addWorkspaceBtn");
+const boardTitleEl = document.getElementById("boardTitle");
 
 let editingId = null;
+let cachedWorkspaces = [];
+let cachedGroups = [];
 let cachedTasks = [];
+let currentWorkspaceId = localStorage.getItem("ledger_workspace_id") || null;
 let searchTerm = "";
 
 function todayISO() {
@@ -45,17 +42,97 @@ function formatDue(dateStr) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function dueState(dateStr, status) {
-  if (!dateStr || status === "done") return "";
+function dueState(dateStr, isDoneGroup) {
+  if (!dateStr || isDoneGroup) return "";
   if (dateStr < todayISO()) return "overdue";
   if (dateStr === todayISO()) return "today";
   return "";
 }
 
+async function seedDefaultGroups(workspaceId) {
+  await sb.from("groups").insert([
+    { workspace_id: workspaceId, name: "To do", is_done_group: false, position: 0 },
+    { workspace_id: workspaceId, name: "In progress", is_done_group: false, position: 1 },
+    { workspace_id: workspaceId, name: "Done", is_done_group: true, position: 2 },
+  ]);
+}
+
+async function loadWorkspaces() {
+  const { data, error } = await sb.from("workspaces").select("*").order("position", { ascending: true });
+  if (error) {
+    console.error(error);
+    syncStatus.textContent = "sync failed — check console";
+    return;
+  }
+  cachedWorkspaces = data;
+
+  if (cachedWorkspaces.length === 0) {
+    const { data: ws, error: wsErr } = await sb
+      .from("workspaces")
+      .insert({ name: "My tasks", position: 0 })
+      .select()
+      .single();
+    if (wsErr) {
+      console.error(wsErr);
+      return;
+    }
+    await seedDefaultGroups(ws.id);
+    cachedWorkspaces = [ws];
+  }
+
+  if (!currentWorkspaceId || !cachedWorkspaces.find((w) => w.id === currentWorkspaceId)) {
+    currentWorkspaceId = cachedWorkspaces[0].id;
+  }
+  localStorage.setItem("ledger_workspace_id", currentWorkspaceId);
+  renderWorkspaceList();
+}
+
+function renderWorkspaceList() {
+  workspaceListEl.innerHTML = "";
+  cachedWorkspaces.forEach((ws) => {
+    const a = document.createElement("a");
+    a.href = "#";
+    a.className = `board-item${ws.id === currentWorkspaceId ? " active" : ""}`;
+    a.textContent = ws.name;
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (ws.id === currentWorkspaceId) return;
+      currentWorkspaceId = ws.id;
+      localStorage.setItem("ledger_workspace_id", currentWorkspaceId);
+      renderWorkspaceList();
+      loadBoard();
+    });
+    workspaceListEl.appendChild(a);
+  });
+  const current = cachedWorkspaces.find((w) => w.id === currentWorkspaceId);
+  if (current) boardTitleEl.textContent = current.name;
+}
+
+async function loadGroups() {
+  const { data, error } = await sb
+    .from("groups")
+    .select("*")
+    .eq("workspace_id", currentWorkspaceId)
+    .order("position", { ascending: true });
+  if (error) {
+    console.error(error);
+    cachedGroups = [];
+    return;
+  }
+  cachedGroups = data;
+}
+
 async function fetchTasks() {
+  if (cachedGroups.length === 0) {
+    cachedTasks = [];
+    renderBoard();
+    return;
+  }
+  const groupIds = cachedGroups.map((g) => g.id);
   const { data, error } = await sb
     .from("tasks")
     .select("*")
+    .in("group_id", groupIds)
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true });
 
@@ -69,33 +146,138 @@ async function fetchTasks() {
   syncStatus.textContent = `synced ${new Date().toLocaleTimeString()}`;
 }
 
-function renderBoard() {
-  STATUSES.forEach((s) => (rowsEls[s].innerHTML = ""));
-
-  const term = searchTerm.trim().toLowerCase();
-  const visible = term
-    ? cachedTasks.filter((t) => t.title.toLowerCase().includes(term))
-    : cachedTasks;
-
-  visible.forEach((task) => {
-    rowsEls[task.status].appendChild(buildRow(task));
-  });
-
-  STATUSES.forEach((s) => {
-    countEls[s].textContent = visible.filter((t) => t.status === s).length;
-  });
-
-  const overdueCount = cachedTasks.filter(
-    (t) => t.status !== "done" && t.due_date && t.due_date < todayISO()
-  ).length;
-
-  overdueReadout.innerHTML =
-    overdueCount > 0 ? `<strong>${overdueCount}</strong> overdue` : "All caught up";
+async function loadBoard() {
+  await loadGroups();
+  await fetchTasks();
 }
 
-function buildRow(task) {
+function renderBoard() {
+  groupsContainer.innerHTML = "";
+
+  const term = searchTerm.trim().toLowerCase();
+  const visible = term ? cachedTasks.filter((t) => t.title.toLowerCase().includes(term)) : cachedTasks;
+
+  cachedGroups.forEach((group, idx) => {
+    const color = PALETTE[idx % PALETTE.length];
+    const groupTasks = visible.filter((t) => t.group_id === group.id);
+
+    const section = document.createElement("section");
+    section.className = "group";
+    section.dataset.groupId = group.id;
+
+    const header = document.createElement("div");
+    header.className = "group-header";
+
+    const toggle = document.createElement("button");
+    toggle.className = "group-toggle";
+    toggle.setAttribute("aria-label", "Collapse group");
+    toggle.addEventListener("click", () => section.classList.toggle("collapsed"));
+    header.appendChild(toggle);
+
+    const dot = document.createElement("span");
+    dot.className = "group-dot";
+    dot.style.background = group.is_done_group ? color : "transparent";
+    dot.style.border = `1.5px solid ${color}`;
+    header.appendChild(dot);
+
+    const h2 = document.createElement("h2");
+    h2.textContent = group.name;
+    header.appendChild(h2);
+
+    const count = document.createElement("span");
+    count.className = "group-count";
+    count.textContent = groupTasks.length;
+    header.appendChild(count);
+
+    if (cachedGroups.length > 1) {
+      const delBtn = document.createElement("button");
+      delBtn.className = "group-delete-btn";
+      delBtn.textContent = "×";
+      delBtn.title = "Delete group";
+      delBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Delete "${group.name}"? Tasks inside will also be deleted.`)) return;
+        const { error } = await sb.from("groups").delete().eq("id", group.id);
+        if (error) {
+          console.error(error);
+          return;
+        }
+        await loadBoard();
+      });
+      header.appendChild(delBtn);
+    }
+
+    section.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "group-body";
+
+    const headRow = document.createElement("div");
+    headRow.className = "table-head-row";
+    headRow.innerHTML = `
+      <div class="col-check"></div>
+      <div class="col-item">Item</div>
+      <div class="col-avatar"></div>
+      <div class="col-status">Status</div>
+      <div class="col-due">Due date</div>
+      <div class="col-priority">Priority</div>
+    `;
+    body.appendChild(headRow);
+
+    const rowsEl = document.createElement("div");
+    rowsEl.className = "rows";
+    groupTasks.forEach((task) => rowsEl.appendChild(buildRow(task, group)));
+    body.appendChild(rowsEl);
+
+    const addItemBtn = document.createElement("button");
+    addItemBtn.className = "add-item-row";
+    addItemBtn.textContent = "+ Add item";
+    addItemBtn.addEventListener("click", () => openModal(null, group.id));
+    body.appendChild(addItemBtn);
+
+    section.appendChild(body);
+
+    const bar = document.createElement("div");
+    bar.className = "group-bar";
+    bar.style.background = color;
+    section.appendChild(bar);
+
+    section.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      section.classList.add("drag-over");
+    });
+    section.addEventListener("dragleave", () => section.classList.remove("drag-over"));
+    section.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      section.classList.remove("drag-over");
+      const dragging = document.querySelector(".row.dragging");
+      if (!dragging) return;
+      const id = dragging.dataset.id;
+      const task = cachedTasks.find((t) => t.id === id);
+      if (!task || task.group_id === group.id) return;
+      task.group_id = group.id;
+      renderBoard();
+      const { error } = await sb.from("tasks").update({ group_id: group.id }).eq("id", id);
+      if (error) {
+        console.error(error);
+        fetchTasks();
+      }
+    });
+
+    groupsContainer.appendChild(section);
+  });
+
+  const doneGroupIds = cachedGroups.filter((g) => g.is_done_group).map((g) => g.id);
+  const overdueCount = cachedTasks.filter(
+    (t) => !doneGroupIds.includes(t.group_id) && t.due_date && t.due_date < todayISO()
+  ).length;
+
+  overdueReadout.innerHTML = overdueCount > 0 ? `<strong>${overdueCount}</strong> overdue` : "All caught up";
+}
+
+function buildRow(task, group) {
   const row = document.createElement("div");
-  row.className = `row${task.status === "done" ? " is-done" : ""}`;
+  row.className = `row${group.is_done_group ? " is-done" : ""}`;
   row.draggable = true;
   row.dataset.id = task.id;
 
@@ -104,13 +286,16 @@ function buildRow(task) {
   checkCol.className = "col-check";
   const check = document.createElement("input");
   check.type = "checkbox";
-  check.checked = task.status === "done";
+  check.checked = group.is_done_group;
   check.addEventListener("click", (e) => e.stopPropagation());
   check.addEventListener("change", async () => {
-    const newStatus = check.checked ? "done" : "todo";
-    task.status = newStatus;
+    const doneGroup = cachedGroups.find((g) => g.is_done_group);
+    const fallbackGroup = cachedGroups.find((g) => !g.is_done_group) || cachedGroups[0];
+    const targetGroup = check.checked ? doneGroup : fallbackGroup;
+    if (!targetGroup) return;
+    task.group_id = targetGroup.id;
     renderBoard();
-    const { error } = await sb.from("tasks").update({ status: newStatus }).eq("id", task.id);
+    const { error } = await sb.from("tasks").update({ group_id: targetGroup.id }).eq("id", task.id);
     if (error) {
       console.error(error);
       fetchTasks();
@@ -134,23 +319,23 @@ function buildRow(task) {
   avatarCol.appendChild(avatar);
   row.appendChild(avatarCol);
 
-  // status dropdown
+  // status dropdown (moves task between groups)
   const statusCol = document.createElement("div");
   statusCol.className = "col-status";
   const statusSelect = document.createElement("select");
-  STATUSES.forEach((s) => {
+  cachedGroups.forEach((g) => {
     const opt = document.createElement("option");
-    opt.value = s;
-    opt.textContent = s === "todo" ? "To do" : s === "in_progress" ? "In progress" : "Done";
-    if (s === task.status) opt.selected = true;
+    opt.value = g.id;
+    opt.textContent = g.name;
+    if (g.id === task.group_id) opt.selected = true;
     statusSelect.appendChild(opt);
   });
   statusSelect.addEventListener("click", (e) => e.stopPropagation());
   statusSelect.addEventListener("change", async () => {
-    const newStatus = statusSelect.value;
-    task.status = newStatus;
+    const newGroupId = statusSelect.value;
+    task.group_id = newGroupId;
     renderBoard();
-    const { error } = await sb.from("tasks").update({ status: newStatus }).eq("id", task.id);
+    const { error } = await sb.from("tasks").update({ group_id: newGroupId }).eq("id", task.id);
     if (error) {
       console.error(error);
       fetchTasks();
@@ -161,13 +346,13 @@ function buildRow(task) {
 
   // due date
   const dueCol = document.createElement("div");
-  const state = dueState(task.due_date, task.status);
+  const state = dueState(task.due_date, group.is_done_group);
   dueCol.className = `col-due ${state}`;
   if (task.due_date) {
     if (state === "overdue" || state === "today") {
       const marker = document.createElement("span");
       marker.className = "marker";
-      marker.textContent = state === "overdue" ? "\u25CF" : "\u25CB";
+      marker.textContent = state === "overdue" ? "●" : "○";
       dueCol.appendChild(marker);
     }
     const text = document.createElement("span");
@@ -192,42 +377,42 @@ function buildRow(task) {
   return row;
 }
 
-// Drag and drop between groups
-document.querySelectorAll(".group").forEach((group) => {
-  group.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    group.classList.add("drag-over");
-  });
-  group.addEventListener("dragleave", () => group.classList.remove("drag-over"));
-  group.addEventListener("drop", async (e) => {
-    e.preventDefault();
-    group.classList.remove("drag-over");
-    const dragging = document.querySelector(".row.dragging");
-    if (!dragging) return;
-    const id = dragging.dataset.id;
-    const newStatus = group.dataset.status;
-    const task = cachedTasks.find((t) => t.id === id);
-    if (!task || task.status === newStatus) return;
-    task.status = newStatus;
-    renderBoard();
-    const { error } = await sb.from("tasks").update({ status: newStatus }).eq("id", id);
-    if (error) {
-      console.error(error);
-      fetchTasks();
-    }
-  });
+// Add group
+addGroupBtn.addEventListener("click", async () => {
+  const name = prompt("New group name:");
+  if (!name || !name.trim()) return;
+  const isDone = confirm("Should tasks moved into this group count as completed (like a \"Done\" column)?");
+  const nextPos = cachedGroups.length ? Math.max(...cachedGroups.map((g) => g.position)) + 1 : 0;
+  const { error } = await sb
+    .from("groups")
+    .insert({ workspace_id: currentWorkspaceId, name: name.trim(), is_done_group: isDone, position: nextPos });
+  if (error) {
+    console.error(error);
+    return;
+  }
+  await loadBoard();
 });
 
-// Group collapse/expand
-document.querySelectorAll(".group-toggle").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    btn.closest(".group").classList.toggle("collapsed");
-  });
-});
-
-// Add item per group
-document.querySelectorAll(".add-item-row").forEach((btn) => {
-  btn.addEventListener("click", () => openModal(null, btn.dataset.status));
+// Add workspace (board)
+addWorkspaceBtn.addEventListener("click", async () => {
+  const name = prompt("New board name:");
+  if (!name || !name.trim()) return;
+  const nextPos = cachedWorkspaces.length ? Math.max(...cachedWorkspaces.map((w) => w.position)) + 1 : 0;
+  const { data: ws, error } = await sb
+    .from("workspaces")
+    .insert({ name: name.trim(), position: nextPos })
+    .select()
+    .single();
+  if (error) {
+    console.error(error);
+    return;
+  }
+  await seedDefaultGroups(ws.id);
+  cachedWorkspaces.push(ws);
+  currentWorkspaceId = ws.id;
+  localStorage.setItem("ledger_workspace_id", currentWorkspaceId);
+  renderWorkspaceList();
+  await loadBoard();
 });
 
 // Search
@@ -236,21 +421,23 @@ searchInput.addEventListener("input", (e) => {
   renderBoard();
 });
 
-// Add group (not wired to a backend concept — statuses are fixed)
-addGroupBtn.addEventListener("click", () => {
-  const original = addGroupBtn.textContent;
-  addGroupBtn.textContent = "Custom groups aren't available yet";
-  setTimeout(() => (addGroupBtn.textContent = original), 1800);
-});
-
-function openModal(task, presetStatus) {
+function openModal(task, presetGroupId) {
   editingId = task ? task.id : null;
   modalTitle.textContent = task ? "Edit task" : "New task";
   fieldTitle.value = task ? task.title : "";
   fieldDescription.value = task ? task.description || "" : "";
   fieldDueDate.value = task ? task.due_date || "" : "";
   fieldPriority.value = task ? task.priority : "normal";
-  fieldStatus.value = task ? task.status : presetStatus || "todo";
+
+  fieldStatus.innerHTML = "";
+  cachedGroups.forEach((g) => {
+    const opt = document.createElement("option");
+    opt.value = g.id;
+    opt.textContent = g.name;
+    fieldStatus.appendChild(opt);
+  });
+  fieldStatus.value = task ? task.group_id : presetGroupId || (cachedGroups[0] && cachedGroups[0].id) || "";
+
   deleteBtn.hidden = !task;
   modalOverlay.hidden = false;
   fieldTitle.focus();
@@ -275,9 +462,9 @@ taskForm.addEventListener("submit", async (e) => {
     description: fieldDescription.value.trim(),
     due_date: fieldDueDate.value || null,
     priority: fieldPriority.value,
-    status: fieldStatus.value,
+    group_id: fieldStatus.value,
   };
-  if (!payload.title) return;
+  if (!payload.title || !payload.group_id) return;
 
   const { error } = editingId
     ? await sb.from("tasks").update(payload).eq("id", editingId)
@@ -313,4 +500,7 @@ todayDateEl.textContent = new Date().toLocaleDateString(undefined, {
   day: "numeric",
 });
 
-fetchTasks();
+(async function init() {
+  await loadWorkspaces();
+  await loadBoard();
+})();
