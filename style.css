@@ -65,9 +65,16 @@ a {
 
 .sidebar-top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   padding: 0 6px 16px;
+}
+
+.wordmark-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .wordmark {
