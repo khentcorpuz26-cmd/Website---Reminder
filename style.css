@@ -175,11 +175,21 @@ a {
   margin-bottom: 4px;
 }
 
+#workspaceList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .board-item {
+  display: block;
   font-size: 13.5px;
   padding: 7px 8px;
   border-radius: var(--radius);
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .board-item.active {
