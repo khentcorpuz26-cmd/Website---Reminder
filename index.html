@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+  rel="stylesheet"
+/>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app-shell">
+
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <span class="wordmark">Ledger</span>
+      <span class="workspace-label">Personal</span>
+    </div>
+
+    <div class="sidebar-search">
+      <input type="text" id="searchInput" placeholder="Search tasks" />
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item active" href="#">
+        <span class="nav-icon" data-icon="board"></span>
+        Board
+      </a>
+      <a class="nav-item" href="#" tabindex="-1">
+        <span class="nav-icon" data-icon="star"></span>
+        Favorites
+      </a>
+      <a class="nav-item" href="#" tabindex="-1">
+        <span class="nav-icon" data-icon="settings"></span>
+        Settings
+      </a>
+    </nav>
+
+    <div class="sidebar-section">
+      <span class="sidebar-section-label">Workspace</span>
+      <a class="board-item active" href="#">My tasks</a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1>My tasks</h1>
+        <span class="today-date" id="todayDate"></span>
+      </div>
+
+      <div class="toolbar">
+        <button class="tb-btn tb-btn-primary" id="newItemBtn">New item</button>
+        <button class="tb-btn" disabled>Person</button>
+        <button class="tb-btn" disabled>Filter</button>
+        <button class="tb-btn" disabled>Sort</button>
+        <button class="tb-btn" disabled>Group by</button>
+      </div>
+
+      <div class="topbar-right">
+        <div class="readout" id="overdueReadout"></div>
+        <div class="avatar-badge">K</div>
+      </div>
+    </header>
+
+    <div class="board-scroll" id="boardScroll">
+
+      <section class="group" data-status="todo">
+        <div class="group-header">
+          <button class="group-toggle" aria-label="Collapse group"></button>
+          <span class="group-dot dot-todo"></span>
+          <h2>To do</h2>
+          <span class="group-count" id="count-todo">0</span>
+        </div>
+        <div class="group-body">
+          <div class="table-head-row">
+            <div class="col-check"></div>
+            <div class="col-item">Item</div>
+            <div class="col-avatar"></div>
+            <div class="col-due">Due date</div>
+            <div class="col-priority">Priority</div>
+          </div>
+          <div class="rows" id="rows-todo"></div>
+          <button class="add-item-row" data-status="todo">+ Add item</button>
+        </div>
+        <div class="group-bar bar-todo"></div>
+      </section>
+
+      <section class="group" data-status="in_progress">
+        <div class="group-header">
+          <button class="group-toggle" aria-label="Collapse group"></button>
+          <span class="group-dot dot-progress"></span>
+          <h2>In progress</h2>
+          <span class="group-count" id="count-in_progress">0</span>
+        </div>
+        <div class="group-body">
+          <div class="table-head-row">
+            <div class="col-check"></div>
+            <div class="col-item">Item</div>
+            <div class="col-avatar"></div>
+            <div class="col-due">Due date</div>
+            <div class="col-priority">Priority</div>
+          </div>
+          <div class="rows" id="rows-in_progress"></div>
+          <button class="add-item-row" data-status="in_progress">+ Add item</button>
+        </div>
+        <div class="group-bar bar-progress"></div>
+      </section>
+
+      <section class="group" data-status="done">
+        <div class="group-header">
+          <button class="group-toggle" aria-label="Collapse group"></button>
+          <span class="group-dot dot-done"></span>
+          <h2>Done</h2>
+          <span class="group-count" id="count-done">0</span>
+        </div>
+        <div class="group-body">
+          <div class="table-head-row">
+            <div class="col-check"></div>
+            <div class="col-item">Item</div>
+            <div class="col-avatar"></div>
+            <div class="col-due">Due date</div>
+            <div class="col-priority">Priority</div>
+          </div>
+          <div class="rows" id="rows-done"></div>
+          <button class="add-item-row" data-status="done">+ Add item</button>
+        </div>
+        <div class="group-bar bar-done"></div>
+      </section>
+
+      <button class="add-group-btn" id="addGroupBtn">+ Add new group</button>
+
+      <div class="footer" id="syncStatus"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" hidden>
+  <div class="modal">
+    <h2 id="modalTitle">New task</h2>
+    <form id="taskForm">
+      <label>
+        Title
+        <input type="text" id="fieldTitle" maxlength="120" placeholder="What needs to get done?" required />
+      </label>
+      <label>
+        Notes
+        <textarea id="fieldDescription" rows="3" placeholder="Optional detail"></textarea>
+      </label>
+      <div class="form-row">
+        <label>
+          Due date
+          <input type="date" id="fieldDueDate" />
+        </label>
+        <label>
+          Priority
+          <select id="fieldPriority">
+            <option value="low">Low</option>
+            <option value="normal" selected>Normal</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+        <label>
+          Status
+          <select id="fieldStatus">
+            <option value="todo">To do</option>
+            <option value="in_progress">In progress</option>
+            <option value="done">Done</option>
+          </select>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-danger" id="deleteBtn" hidden>Delete</button>
+        <div class="modal-actions-right">
+          <button type="button" class="btn-ghost" id="cancelBtn">Cancel</button>
+          <button type="submit" class="btn-primary" id="saveBtn">Save task</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
