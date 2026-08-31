@@ -377,7 +377,7 @@ a {
 .table-head-row,
 .row {
   display: grid;
-  grid-template-columns: 32px 1fr 40px 110px 100px;
+  grid-template-columns: 32px 1fr 40px 130px 110px 100px;
   align-items: center;
   gap: 10px;
   padding: 0 14px;
@@ -450,6 +450,22 @@ a {
   font-size: 10px;
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+.col-status select {
+  width: 100%;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 6px;
+  cursor: pointer;
+}
+
+.col-status select:focus {
+  outline: none;
+  border-color: var(--text-secondary);
 }
 
 .col-due {
@@ -697,7 +713,7 @@ a {
 
   .table-head-row,
   .row {
-    grid-template-columns: 26px 1fr 90px;
+    grid-template-columns: 26px 1fr 100px 90px;
   }
 
   .col-avatar {

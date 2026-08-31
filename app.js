@@ -134,6 +134,31 @@ function buildRow(task) {
   avatarCol.appendChild(avatar);
   row.appendChild(avatarCol);
 
+  // status dropdown
+  const statusCol = document.createElement("div");
+  statusCol.className = "col-status";
+  const statusSelect = document.createElement("select");
+  STATUSES.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = s === "todo" ? "To do" : s === "in_progress" ? "In progress" : "Done";
+    if (s === task.status) opt.selected = true;
+    statusSelect.appendChild(opt);
+  });
+  statusSelect.addEventListener("click", (e) => e.stopPropagation());
+  statusSelect.addEventListener("change", async () => {
+    const newStatus = statusSelect.value;
+    task.status = newStatus;
+    renderBoard();
+    const { error } = await sb.from("tasks").update({ status: newStatus }).eq("id", task.id);
+    if (error) {
+      console.error(error);
+      fetchTasks();
+    }
+  });
+  statusCol.appendChild(statusSelect);
+  row.appendChild(statusCol);
+
   // due date
   const dueCol = document.createElement("div");
   const state = dueState(task.due_date, task.status);
