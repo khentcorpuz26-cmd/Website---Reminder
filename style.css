@@ -10,9 +10,26 @@
   --text-secondary: #a3a3a3;
   --text-tertiary: #6e6e6e;
   --white-fill: #f2f2f2;
+  --fill-contrast: #111;
   --mid-fill: #4a4a4a;
   --radius: 4px;
   --font: "Inter", system-ui, sans-serif;
+}
+
+[data-theme="light"] {
+  --bg: #f7f7f5;
+  --sidebar-bg: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #f0f0ee;
+  --row-hover: #f0f0ee;
+  --border: #e2e2df;
+  --border-strong: #cfcfcb;
+  --text: #16161a;
+  --text-secondary: #5c5c5c;
+  --text-tertiary: #8a8a8a;
+  --white-fill: #16161a;
+  --fill-contrast: #f7f7f5;
+  --mid-fill: #d8d8d5;
 }
 
 * {
@@ -126,7 +143,12 @@ a {
   border-radius: var(--radius);
   font-size: 13.5px;
   color: var(--text-secondary);
-  cursor: default;
+  cursor: pointer;
+}
+
+.nav-item:hover {
+  background: var(--surface);
+  color: var(--text);
 }
 
 .nav-item.active {
@@ -280,7 +302,7 @@ a {
 
 .tb-btn-primary {
   background: var(--white-fill);
-  color: #111;
+  color: var(--fill-contrast);
   border-color: var(--white-fill);
   font-weight: 600;
 }
@@ -429,7 +451,7 @@ a {
 .table-head-row,
 .row {
   display: grid;
-  grid-template-columns: 32px 1fr 40px 130px 110px 100px;
+  grid-template-columns: 32px 22px 1fr 40px 130px 110px 100px;
   align-items: center;
   gap: 10px;
   padding: 0 14px;
@@ -472,6 +494,11 @@ a {
   cursor: pointer;
 }
 
+.col-star {
+  display: flex;
+  justify-content: center;
+}
+
 .col-item {
   font-size: 13.5px;
   color: var(--text);
@@ -488,6 +515,29 @@ a {
 .col-avatar {
   display: flex;
   justify-content: center;
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.star-btn:hover {
+  color: var(--text-secondary);
+}
+
+.star-btn.favorited {
+  color: var(--white-fill);
 }
 
 .row-avatar {
@@ -555,7 +605,7 @@ a {
 
 .pill-high {
   background: var(--white-fill);
-  color: #111;
+  color: var(--fill-contrast);
   font-weight: 600;
 }
 
@@ -708,9 +758,13 @@ a {
   gap: 8px;
 }
 
+.modal-actions-end {
+  justify-content: flex-end;
+}
+
 .btn-primary {
   background: var(--white-fill);
-  color: #111;
+  color: var(--fill-contrast);
   border: none;
   border-radius: var(--radius);
   padding: 9px 16px;
@@ -765,7 +819,7 @@ a {
 
   .table-head-row,
   .row {
-    grid-template-columns: 26px 1fr 100px 90px;
+    grid-template-columns: 26px 20px 1fr 100px 90px;
   }
 
   .col-avatar {

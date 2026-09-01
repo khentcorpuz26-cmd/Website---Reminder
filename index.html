@@ -29,15 +29,15 @@
     </div>
 
     <nav class="sidebar-nav">
-      <a class="nav-item active" href="#">
+      <a class="nav-item active" href="#" id="navBoard">
         <span class="nav-icon" data-icon="board"></span>
         Board
       </a>
-      <a class="nav-item" href="#" tabindex="-1">
+      <a class="nav-item" href="#" id="navFavorites">
         <span class="nav-icon" data-icon="star"></span>
         Favorites
       </a>
-      <a class="nav-item" href="#" tabindex="-1">
+      <a class="nav-item" href="#" id="navSettings">
         <span class="nav-icon" data-icon="settings"></span>
         Settings
       </a>
@@ -67,7 +67,7 @@
 
       <div class="topbar-right">
         <div class="readout" id="overdueReadout"></div>
-        <div class="avatar-badge">K</div>
+        <div class="avatar-badge" id="avatarBadge">K</div>
       </div>
     </header>
 
@@ -121,6 +121,31 @@
         <div class="modal-actions-right">
           <button type="button" class="btn-ghost" id="cancelBtn">Cancel</button>
           <button type="submit" class="btn-primary" id="saveBtn">Save task</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsOverlay" hidden>
+  <div class="modal">
+    <h2>Settings</h2>
+    <form id="settingsForm">
+      <label>
+        Display name
+        <input type="text" id="fieldDisplayName" maxlength="40" placeholder="Your name" />
+      </label>
+      <label>
+        Theme
+        <select id="fieldTheme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </label>
+      <div class="modal-actions modal-actions-end">
+        <div class="modal-actions-right">
+          <button type="button" class="btn-ghost" id="settingsCancelBtn">Cancel</button>
+          <button type="submit" class="btn-primary">Save</button>
         </div>
       </div>
     </form>

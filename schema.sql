@@ -32,6 +32,7 @@ create table tasks (
   description text default '',
   priority text not null default 'normal' check (priority in ('low', 'normal', 'high')),
   due_date date,
+  is_favorite boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -78,3 +79,7 @@ create index tasks_due_date_idx on tasks (due_date);
 -- The website auto-creates a default "My tasks" board with To do / In
 -- progress / Done groups on first load if no workspace exists yet, so no
 -- seed data is needed here.
+
+-- Migration only (run this ONE line instead of the whole file if you already
+-- have data in your tasks table and don't want to wipe it):
+-- alter table tasks add column if not exists is_favorite boolean not null default false;

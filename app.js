@@ -22,6 +22,16 @@ const groupsContainer = document.getElementById("groupsContainer");
 const workspaceListEl = document.getElementById("workspaceList");
 const addWorkspaceBtn = document.getElementById("addWorkspaceBtn");
 const boardTitleEl = document.getElementById("boardTitle");
+const navBoard = document.getElementById("navBoard");
+const navFavorites = document.getElementById("navFavorites");
+const navSettings = document.getElementById("navSettings");
+const addGroupBtnEl = document.getElementById("addGroupBtn");
+const settingsOverlay = document.getElementById("settingsOverlay");
+const settingsForm = document.getElementById("settingsForm");
+const fieldDisplayName = document.getElementById("fieldDisplayName");
+const fieldTheme = document.getElementById("fieldTheme");
+const settingsCancelBtn = document.getElementById("settingsCancelBtn");
+const avatarBadgeEl = document.getElementById("avatarBadge");
 
 let editingId = null;
 let cachedWorkspaces = [];
@@ -29,6 +39,7 @@ let cachedGroups = [];
 let cachedTasks = [];
 let currentWorkspaceId = localStorage.getItem("ledger_workspace_id") || null;
 let searchTerm = "";
+let currentView = "board";
 
 function todayISO() {
   const d = new Date();
@@ -105,7 +116,7 @@ function renderWorkspaceList() {
     workspaceListEl.appendChild(a);
   });
   const current = cachedWorkspaces.find((w) => w.id === currentWorkspaceId);
-  if (current) boardTitleEl.textContent = current.name;
+  if (current) boardTitleEl.textContent = currentView === "favorites" ? "Favorites" : current.name;
 }
 
 async function loadGroups() {
@@ -155,11 +166,18 @@ function renderBoard() {
   groupsContainer.innerHTML = "";
 
   const term = searchTerm.trim().toLowerCase();
-  const visible = term ? cachedTasks.filter((t) => t.title.toLowerCase().includes(term)) : cachedTasks;
+  let visible = term ? cachedTasks.filter((t) => t.title.toLowerCase().includes(term)) : cachedTasks;
+  if (currentView === "favorites") {
+    visible = visible.filter((t) => t.is_favorite);
+  }
+
+  addGroupBtnEl.hidden = currentView === "favorites";
 
   cachedGroups.forEach((group, idx) => {
     const color = PALETTE[idx % PALETTE.length];
     const groupTasks = visible.filter((t) => t.group_id === group.id);
+
+    if (currentView === "favorites" && groupTasks.length === 0) return;
 
     const section = document.createElement("section");
     section.className = "group";
@@ -216,6 +234,7 @@ function renderBoard() {
     headRow.className = "table-head-row";
     headRow.innerHTML = `
       <div class="col-check"></div>
+      <div class="col-star"></div>
       <div class="col-item">Item</div>
       <div class="col-avatar"></div>
       <div class="col-status">Status</div>
@@ -267,6 +286,13 @@ function renderBoard() {
     groupsContainer.appendChild(section);
   });
 
+  if (currentView === "favorites" && visible.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "footer";
+    empty.textContent = "No favorites yet — click the star on a task to add it here.";
+    groupsContainer.appendChild(empty);
+  }
+
   const doneGroupIds = cachedGroups.filter((g) => g.is_done_group).map((g) => g.id);
   const overdueCount = cachedTasks.filter(
     (t) => !doneGroupIds.includes(t.group_id) && t.due_date && t.due_date < todayISO()
@@ -303,6 +329,28 @@ function buildRow(task, group) {
   });
   checkCol.appendChild(check);
   row.appendChild(checkCol);
+
+  // favorite star
+  const starCol = document.createElement("div");
+  starCol.className = "col-star";
+  const starBtn = document.createElement("button");
+  starBtn.type = "button";
+  starBtn.className = `star-btn${task.is_favorite ? " favorited" : ""}`;
+  starBtn.title = task.is_favorite ? "Remove from favorites" : "Add to favorites";
+  starBtn.textContent = task.is_favorite ? "★" : "☆";
+  starBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const next = !task.is_favorite;
+    task.is_favorite = next;
+    renderBoard();
+    const { error } = await sb.from("tasks").update({ is_favorite: next }).eq("id", task.id);
+    if (error) {
+      console.error(error);
+      fetchTasks();
+    }
+  });
+  starCol.appendChild(starBtn);
+  row.appendChild(starCol);
 
   // title
   const itemCol = document.createElement("div");
@@ -421,6 +469,71 @@ searchInput.addEventListener("input", (e) => {
   renderBoard();
 });
 
+// Board / Favorites view switching
+function setView(view) {
+  currentView = view;
+  navBoard.classList.toggle("active", view === "board");
+  navFavorites.classList.toggle("active", view === "favorites");
+  const current = cachedWorkspaces.find((w) => w.id === currentWorkspaceId);
+  boardTitleEl.textContent = view === "favorites" ? "Favorites" : current ? current.name : "My tasks";
+  renderBoard();
+}
+
+navBoard.addEventListener("click", (e) => {
+  e.preventDefault();
+  setView("board");
+});
+
+navFavorites.addEventListener("click", (e) => {
+  e.preventDefault();
+  setView("favorites");
+});
+
+// Settings
+function applyDisplayName(name) {
+  const initial = (name || "K").trim().charAt(0).toUpperCase() || "K";
+  avatarBadgeEl.textContent = initial;
+}
+
+function applyTheme(theme) {
+  if (theme === "light") {
+    document.documentElement.dataset.theme = "light";
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+}
+
+function openSettings() {
+  fieldDisplayName.value = localStorage.getItem("ledger_display_name") || "";
+  fieldTheme.value = localStorage.getItem("ledger_theme") || "dark";
+  settingsOverlay.hidden = false;
+}
+
+function closeSettings() {
+  settingsOverlay.hidden = true;
+}
+
+navSettings.addEventListener("click", (e) => {
+  e.preventDefault();
+  openSettings();
+});
+
+settingsCancelBtn.addEventListener("click", closeSettings);
+settingsOverlay.addEventListener("click", (e) => {
+  if (e.target === settingsOverlay) closeSettings();
+});
+
+settingsForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = fieldDisplayName.value.trim();
+  const theme = fieldTheme.value;
+  localStorage.setItem("ledger_display_name", name);
+  localStorage.setItem("ledger_theme", theme);
+  applyDisplayName(name);
+  applyTheme(theme);
+  closeSettings();
+});
+
 function openModal(task, presetGroupId) {
   editingId = task ? task.id : null;
   modalTitle.textContent = task ? "Edit task" : "New task";
@@ -491,7 +604,9 @@ deleteBtn.addEventListener("click", async () => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !modalOverlay.hidden) closeModal();
+  if (e.key !== "Escape") return;
+  if (!modalOverlay.hidden) closeModal();
+  if (!settingsOverlay.hidden) closeSettings();
 });
 
 todayDateEl.textContent = new Date().toLocaleDateString(undefined, {
@@ -501,6 +616,8 @@ todayDateEl.textContent = new Date().toLocaleDateString(undefined, {
 });
 
 (async function init() {
+  applyTheme(localStorage.getItem("ledger_theme") || "dark");
+  applyDisplayName(localStorage.getItem("ledger_display_name") || "");
   await loadWorkspaces();
   await loadBoard();
 })();
