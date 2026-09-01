@@ -2,6 +2,11 @@ const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
 const PALETTE = ["#9a9a9a", "#6ba5c9", "#c98b6b", "#8bc98f", "#c9c26b", "#a06bc9", "#c96b8f"];
 
+const FOLDER_ICON_SVG =
+  '<svg class="board-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+  '<path d="M1.5 3.5a1 1 0 0 1 1-1h3.1a1 1 0 0 1 .8.4l.9 1.2a1 1 0 0 0 .8.4H13.5a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-8.5Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>' +
+  "</svg>";
+
 const modalOverlay = document.getElementById("modalOverlay");
 const modalTitle = document.getElementById("modalTitle");
 const taskForm = document.getElementById("taskForm");
@@ -40,6 +45,7 @@ let cachedTasks = [];
 let currentWorkspaceId = localStorage.getItem("ledger_workspace_id") || null;
 let searchTerm = "";
 let currentView = "board";
+let workspaceTaskCounts = {};
 
 function todayISO() {
   const d = new Date();
@@ -95,7 +101,39 @@ async function loadWorkspaces() {
     currentWorkspaceId = cachedWorkspaces[0].id;
   }
   localStorage.setItem("ledger_workspace_id", currentWorkspaceId);
+  await loadWorkspaceCounts();
   renderWorkspaceList();
+}
+
+async function loadWorkspaceCounts() {
+  const { data: allGroups, error: groupsErr } = await sb.from("groups").select("id,workspace_id");
+  if (groupsErr) {
+    console.error(groupsErr);
+    return;
+  }
+  const groupToWorkspace = {};
+  allGroups.forEach((g) => {
+    groupToWorkspace[g.id] = g.workspace_id;
+  });
+
+  const { data: allTasks, error: tasksErr } = await sb.from("tasks").select("group_id");
+  if (tasksErr) {
+    console.error(tasksErr);
+    return;
+  }
+  const counts = {};
+  allTasks.forEach((t) => {
+    const wsId = groupToWorkspace[t.group_id];
+    if (!wsId) return;
+    counts[wsId] = (counts[wsId] || 0) + 1;
+  });
+  workspaceTaskCounts = counts;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 function renderWorkspaceList() {
@@ -104,7 +142,10 @@ function renderWorkspaceList() {
     const a = document.createElement("a");
     a.href = "#";
     a.className = `board-item${ws.id === currentWorkspaceId ? " active" : ""}`;
-    a.textContent = ws.name;
+    a.innerHTML =
+      FOLDER_ICON_SVG +
+      `<span class="board-item-name">${escapeHtml(ws.name)}</span>` +
+      `<span class="board-item-count">${workspaceTaskCounts[ws.id] || 0}</span>`;
     a.addEventListener("click", (e) => {
       e.preventDefault();
       if (ws.id === currentWorkspaceId) return;
@@ -153,6 +194,8 @@ async function fetchTasks() {
     return;
   }
   cachedTasks = data;
+  workspaceTaskCounts[currentWorkspaceId] = cachedTasks.length;
+  renderWorkspaceList();
   renderBoard();
   syncStatus.textContent = `synced ${new Date().toLocaleTimeString()}`;
 }
