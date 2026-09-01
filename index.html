@@ -62,8 +62,23 @@
       <div class="toolbar">
         <button class="tb-btn tb-btn-primary" id="newItemBtn">New item</button>
         <button class="tb-btn" disabled>Person</button>
-        <button class="tb-btn" disabled>Filter</button>
-        <button class="tb-btn" disabled>Sort</button>
+        <div class="tb-dropdown">
+          <button class="tb-btn" id="filterBtn">Filter</button>
+          <div class="tb-panel" id="filterPanel" hidden>
+            <button type="button" class="tb-panel-item" data-filter="all">All priorities</button>
+            <button type="button" class="tb-panel-item" data-filter="high">High only</button>
+            <button type="button" class="tb-panel-item" data-filter="normal">Normal only</button>
+            <button type="button" class="tb-panel-item" data-filter="low">Low only</button>
+          </div>
+        </div>
+        <div class="tb-dropdown">
+          <button class="tb-btn" id="sortBtn">Sort</button>
+          <div class="tb-panel" id="sortPanel" hidden>
+            <button type="button" class="tb-panel-item" data-sort="due">Due date</button>
+            <button type="button" class="tb-panel-item" data-sort="priority">Priority</button>
+            <button type="button" class="tb-panel-item" data-sort="title">Title (A-Z)</button>
+          </div>
+        </div>
         <button class="tb-btn" disabled>Group by</button>
       </div>
 
@@ -103,7 +118,12 @@
         </label>
         <label>
           Priority
-          <select id="fieldPriority">
+          <div class="chip-group" id="priorityChips">
+            <button type="button" class="chip chip-low" data-priority="low">Low</button>
+            <button type="button" class="chip chip-normal" data-priority="normal">Normal</button>
+            <button type="button" class="chip chip-high" data-priority="high">High</button>
+          </div>
+          <select id="fieldPriority" hidden>
             <option value="low">Low</option>
             <option value="normal" selected>Normal</option>
             <option value="high">High</option>
@@ -153,6 +173,43 @@
     </form>
   </div>
 </div>
+
+<div class="modal-overlay" id="promptOverlay" hidden>
+  <div class="modal modal-sm">
+    <h2 id="promptTitle">New item</h2>
+    <form id="promptForm">
+      <label>
+        <span id="promptLabel">Name</span>
+        <input type="text" id="promptInput" maxlength="80" required />
+      </label>
+      <label class="checkbox-label" id="promptCheckboxRow" hidden>
+        <input type="checkbox" id="promptCheckbox" />
+        <span id="promptCheckboxLabel">Counts as completed</span>
+      </label>
+      <div class="modal-actions modal-actions-end">
+        <div class="modal-actions-right">
+          <button type="button" class="btn-ghost" id="promptCancelBtn">Cancel</button>
+          <button type="submit" class="btn-primary" id="promptOkBtn">Create</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="confirmOverlay" hidden>
+  <div class="modal modal-sm">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p class="modal-message" id="confirmMessage"></p>
+    <div class="modal-actions modal-actions-end">
+      <div class="modal-actions-right">
+        <button type="button" class="btn-ghost" id="confirmCancelBtn">Cancel</button>
+        <button type="button" class="btn-primary" id="confirmOkBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>

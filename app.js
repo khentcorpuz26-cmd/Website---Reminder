@@ -37,6 +37,27 @@ const fieldDisplayName = document.getElementById("fieldDisplayName");
 const fieldTheme = document.getElementById("fieldTheme");
 const settingsCancelBtn = document.getElementById("settingsCancelBtn");
 const avatarBadgeEl = document.getElementById("avatarBadge");
+const filterBtn = document.getElementById("filterBtn");
+const filterPanel = document.getElementById("filterPanel");
+const sortBtn = document.getElementById("sortBtn");
+const sortPanel = document.getElementById("sortPanel");
+const priorityChips = document.getElementById("priorityChips");
+const promptOverlay = document.getElementById("promptOverlay");
+const promptForm = document.getElementById("promptForm");
+const promptTitle = document.getElementById("promptTitle");
+const promptLabel = document.getElementById("promptLabel");
+const promptInput = document.getElementById("promptInput");
+const promptCheckboxRow = document.getElementById("promptCheckboxRow");
+const promptCheckbox = document.getElementById("promptCheckbox");
+const promptCheckboxLabel = document.getElementById("promptCheckboxLabel");
+const promptCancelBtn = document.getElementById("promptCancelBtn");
+const promptOkBtn = document.getElementById("promptOkBtn");
+const confirmOverlay = document.getElementById("confirmOverlay");
+const confirmTitle = document.getElementById("confirmTitle");
+const confirmMessage = document.getElementById("confirmMessage");
+const confirmCancelBtn = document.getElementById("confirmCancelBtn");
+const confirmOkBtn = document.getElementById("confirmOkBtn");
+const toastContainer = document.getElementById("toastContainer");
 
 let editingId = null;
 let cachedWorkspaces = [];
@@ -46,6 +67,8 @@ let currentWorkspaceId = localStorage.getItem("ledger_workspace_id") || null;
 let searchTerm = "";
 let currentView = "board";
 let workspaceTaskCounts = {};
+let sortBy = "due";
+let filterPriority = "all";
 
 function todayISO() {
   const d = new Date();
@@ -64,6 +87,86 @@ function dueState(dateStr, isDoneGroup) {
   if (dateStr < todayISO()) return "overdue";
   if (dateStr === todayISO()) return "today";
   return "";
+}
+
+function showToast(message, type) {
+  const toast = document.createElement("div");
+  toast.className = `toast${type === "error" ? " toast-error" : ""}`;
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("show"));
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 200);
+  }, 2600);
+}
+
+function showConfirm({ title, message, confirmLabel = "Confirm", danger = false }) {
+  return new Promise((resolve) => {
+    confirmTitle.textContent = title;
+    confirmMessage.textContent = message;
+    confirmOkBtn.textContent = confirmLabel;
+    confirmOkBtn.classList.toggle("danger", danger);
+    confirmOverlay.hidden = false;
+
+    function cleanup(result) {
+      confirmOverlay.hidden = true;
+      confirmOkBtn.removeEventListener("click", onOk);
+      confirmCancelBtn.removeEventListener("click", onCancel);
+      confirmOverlay.removeEventListener("click", onOverlay);
+      resolve(result);
+    }
+    function onOk() {
+      cleanup(true);
+    }
+    function onCancel() {
+      cleanup(false);
+    }
+    function onOverlay(e) {
+      if (e.target === confirmOverlay) cleanup(false);
+    }
+    confirmOkBtn.addEventListener("click", onOk);
+    confirmCancelBtn.addEventListener("click", onCancel);
+    confirmOverlay.addEventListener("click", onOverlay);
+  });
+}
+
+function showPrompt({ title, label, placeholder = "", defaultValue = "", confirmLabel = "Create", showCheckbox = false, checkboxLabel = "" }) {
+  return new Promise((resolve) => {
+    promptTitle.textContent = title;
+    promptLabel.textContent = label;
+    promptInput.placeholder = placeholder;
+    promptInput.value = defaultValue;
+    promptOkBtn.textContent = confirmLabel;
+    promptCheckboxRow.hidden = !showCheckbox;
+    promptCheckboxLabel.textContent = checkboxLabel;
+    promptCheckbox.checked = false;
+    promptOverlay.hidden = false;
+    promptInput.focus();
+
+    function cleanup(result) {
+      promptOverlay.hidden = true;
+      promptForm.removeEventListener("submit", onSubmit);
+      promptCancelBtn.removeEventListener("click", onCancel);
+      promptOverlay.removeEventListener("click", onOverlay);
+      resolve(result);
+    }
+    function onSubmit(e) {
+      e.preventDefault();
+      const value = promptInput.value.trim();
+      if (!value) return;
+      cleanup({ value, checked: promptCheckbox.checked });
+    }
+    function onCancel() {
+      cleanup(null);
+    }
+    function onOverlay(e) {
+      if (e.target === promptOverlay) cleanup(null);
+    }
+    promptForm.addEventListener("submit", onSubmit);
+    promptCancelBtn.addEventListener("click", onCancel);
+    promptOverlay.addEventListener("click", onOverlay);
+  });
 }
 
 async function seedDefaultGroups(workspaceId) {
@@ -213,12 +316,15 @@ function renderBoard() {
   if (currentView === "favorites") {
     visible = visible.filter((t) => t.is_favorite);
   }
+  if (filterPriority !== "all") {
+    visible = visible.filter((t) => t.priority === filterPriority);
+  }
 
   addGroupBtnEl.hidden = currentView === "favorites";
 
   cachedGroups.forEach((group, idx) => {
     const color = PALETTE[idx % PALETTE.length];
-    const groupTasks = visible.filter((t) => t.group_id === group.id);
+    const groupTasks = sortTasks(visible.filter((t) => t.group_id === group.id));
 
     if (currentView === "favorites" && groupTasks.length === 0) return;
 
@@ -257,12 +363,20 @@ function renderBoard() {
       delBtn.title = "Delete group";
       delBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
-        if (!confirm(`Delete "${group.name}"? Tasks inside will also be deleted.`)) return;
+        const ok = await showConfirm({
+          title: "Delete group?",
+          message: `Delete "${group.name}"? Tasks inside will also be deleted.`,
+          confirmLabel: "Delete",
+          danger: true,
+        });
+        if (!ok) return;
         const { error } = await sb.from("groups").delete().eq("id", group.id);
         if (error) {
           console.error(error);
+          showToast("Couldn't delete group — try again", "error");
           return;
         }
+        showToast(`"${group.name}" deleted`);
         await loadBoard();
       });
       header.appendChild(delBtn);
@@ -322,6 +436,7 @@ function renderBoard() {
       const { error } = await sb.from("tasks").update({ group_id: group.id }).eq("id", id);
       if (error) {
         console.error(error);
+        showToast("Couldn't move task — try again", "error");
         fetchTasks();
       }
     });
@@ -367,6 +482,7 @@ function buildRow(task, group) {
     const { error } = await sb.from("tasks").update({ group_id: targetGroup.id }).eq("id", task.id);
     if (error) {
       console.error(error);
+      showToast("Couldn't update task — try again", "error");
       fetchTasks();
     }
   });
@@ -389,6 +505,7 @@ function buildRow(task, group) {
     const { error } = await sb.from("tasks").update({ is_favorite: next }).eq("id", task.id);
     if (error) {
       console.error(error);
+      showToast("Couldn't update favorite — try again", "error");
       fetchTasks();
     }
   });
@@ -429,6 +546,7 @@ function buildRow(task, group) {
     const { error } = await sb.from("tasks").update({ group_id: newGroupId }).eq("id", task.id);
     if (error) {
       console.error(error);
+      showToast("Couldn't update status — try again", "error");
       fetchTasks();
     }
   });
@@ -470,32 +588,44 @@ function buildRow(task, group) {
 
 // Add group
 addGroupBtn.addEventListener("click", async () => {
-  const name = prompt("New group name:");
-  if (!name || !name.trim()) return;
-  const isDone = confirm("Should tasks moved into this group count as completed (like a \"Done\" column)?");
+  const result = await showPrompt({
+    title: "New group",
+    label: "Group name",
+    placeholder: "e.g. In review",
+    showCheckbox: true,
+    checkboxLabel: 'Counts as completed (like a "Done" column)',
+  });
+  if (!result) return;
   const nextPos = cachedGroups.length ? Math.max(...cachedGroups.map((g) => g.position)) + 1 : 0;
   const { error } = await sb
     .from("groups")
-    .insert({ workspace_id: currentWorkspaceId, name: name.trim(), is_done_group: isDone, position: nextPos });
+    .insert({ workspace_id: currentWorkspaceId, name: result.value, is_done_group: result.checked, position: nextPos });
   if (error) {
     console.error(error);
+    showToast("Couldn't create group — try again", "error");
     return;
   }
+  showToast(`"${result.value}" group created`);
   await loadBoard();
 });
 
 // Add workspace (board)
 addWorkspaceBtn.addEventListener("click", async () => {
-  const name = prompt("New board name:");
-  if (!name || !name.trim()) return;
+  const result = await showPrompt({
+    title: "New board",
+    label: "Board name",
+    placeholder: "e.g. Marketing",
+  });
+  if (!result) return;
   const nextPos = cachedWorkspaces.length ? Math.max(...cachedWorkspaces.map((w) => w.position)) + 1 : 0;
   const { data: ws, error } = await sb
     .from("workspaces")
-    .insert({ name: name.trim(), position: nextPos })
+    .insert({ name: result.value, position: nextPos })
     .select()
     .single();
   if (error) {
     console.error(error);
+    showToast("Couldn't create board — try again", "error");
     return;
   }
   await seedDefaultGroups(ws.id);
@@ -503,6 +633,7 @@ addWorkspaceBtn.addEventListener("click", async () => {
   currentWorkspaceId = ws.id;
   localStorage.setItem("ledger_workspace_id", currentWorkspaceId);
   renderWorkspaceList();
+  showToast(`"${result.value}" board created`);
   await loadBoard();
 });
 
@@ -511,6 +642,71 @@ searchInput.addEventListener("input", (e) => {
   searchTerm = e.target.value;
   renderBoard();
 });
+
+// Filter / Sort dropdowns
+function closePanels(except) {
+  if (filterPanel !== except) filterPanel.hidden = true;
+  if (sortPanel !== except) sortPanel.hidden = true;
+}
+
+filterBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = filterPanel.hidden;
+  closePanels();
+  filterPanel.hidden = !willOpen;
+});
+
+sortBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = sortPanel.hidden;
+  closePanels();
+  sortPanel.hidden = !willOpen;
+});
+
+document.addEventListener("click", () => closePanels());
+filterPanel.addEventListener("click", (e) => e.stopPropagation());
+sortPanel.addEventListener("click", (e) => e.stopPropagation());
+
+filterPanel.querySelectorAll(".tb-panel-item").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    filterPriority = btn.dataset.filter;
+    filterPanel.querySelectorAll(".tb-panel-item").forEach((b) => b.classList.toggle("selected", b === btn));
+    filterBtn.classList.toggle("active", filterPriority !== "all");
+    filterPanel.hidden = true;
+    renderBoard();
+  });
+});
+
+sortPanel.querySelectorAll(".tb-panel-item").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    sortBy = btn.dataset.sort;
+    sortPanel.querySelectorAll(".tb-panel-item").forEach((b) => b.classList.toggle("selected", b === btn));
+    sortBtn.classList.toggle("active", sortBy !== "due");
+    sortPanel.hidden = true;
+    renderBoard();
+  });
+});
+
+filterPanel.querySelector('[data-filter="all"]').classList.add("selected");
+sortPanel.querySelector('[data-sort="due"]').classList.add("selected");
+
+function sortTasks(tasks) {
+  const sorted = tasks.slice();
+  if (sortBy === "priority") {
+    const rank = { high: 0, normal: 1, low: 2 };
+    sorted.sort((a, b) => rank[a.priority] - rank[b.priority]);
+  } else if (sortBy === "title") {
+    sorted.sort((a, b) => a.title.localeCompare(b.title));
+  } else {
+    sorted.sort((a, b) => {
+      if (!a.due_date && !b.due_date) return 0;
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return a.due_date.localeCompare(b.due_date);
+    });
+  }
+  return sorted;
+}
 
 // Board / Favorites view switching
 function setView(view) {
@@ -539,8 +735,8 @@ function applyDisplayName(name) {
 }
 
 function applyTheme(theme) {
-  if (theme === "light") {
-    document.documentElement.dataset.theme = "light";
+  if (theme === "dark") {
+    document.documentElement.dataset.theme = "dark";
   } else {
     delete document.documentElement.dataset.theme;
   }
@@ -548,7 +744,7 @@ function applyTheme(theme) {
 
 function openSettings() {
   fieldDisplayName.value = localStorage.getItem("ledger_display_name") || "";
-  fieldTheme.value = localStorage.getItem("ledger_theme") || "dark";
+  fieldTheme.value = localStorage.getItem("ledger_theme") || "light";
   settingsOverlay.hidden = false;
 }
 
@@ -577,13 +773,24 @@ settingsForm.addEventListener("submit", (e) => {
   closeSettings();
 });
 
+function setPriority(value) {
+  fieldPriority.value = value;
+  priorityChips.querySelectorAll(".chip").forEach((chip) => {
+    chip.classList.toggle("selected", chip.dataset.priority === value);
+  });
+}
+
+priorityChips.querySelectorAll(".chip").forEach((chip) => {
+  chip.addEventListener("click", () => setPriority(chip.dataset.priority));
+});
+
 function openModal(task, presetGroupId) {
   editingId = task ? task.id : null;
   modalTitle.textContent = task ? "Edit task" : "New task";
   fieldTitle.value = task ? task.title : "";
   fieldDescription.value = task ? task.description || "" : "";
   fieldDueDate.value = task ? task.due_date || "" : "";
-  fieldPriority.value = task ? task.priority : "normal";
+  setPriority(task ? task.priority : "normal");
 
   fieldStatus.innerHTML = "";
   cachedGroups.forEach((g) => {
@@ -622,27 +829,38 @@ taskForm.addEventListener("submit", async (e) => {
   };
   if (!payload.title || !payload.group_id) return;
 
+  const wasEditing = Boolean(editingId);
   const { error } = editingId
     ? await sb.from("tasks").update(payload).eq("id", editingId)
     : await sb.from("tasks").insert(payload);
 
   if (error) {
     console.error(error);
+    showToast("Couldn't save task — try again", "error");
     return;
   }
   closeModal();
+  showToast(wasEditing ? "Task updated" : "Task created");
   fetchTasks();
 });
 
 deleteBtn.addEventListener("click", async () => {
   if (!editingId) return;
-  if (!confirm("Delete this task?")) return;
+  const ok = await showConfirm({
+    title: "Delete task?",
+    message: "This can't be undone.",
+    confirmLabel: "Delete",
+    danger: true,
+  });
+  if (!ok) return;
   const { error } = await sb.from("tasks").delete().eq("id", editingId);
   if (error) {
     console.error(error);
+    showToast("Couldn't delete task — try again", "error");
     return;
   }
   closeModal();
+  showToast("Task deleted");
   fetchTasks();
 });
 
@@ -650,6 +868,10 @@ document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (!modalOverlay.hidden) closeModal();
   if (!settingsOverlay.hidden) closeSettings();
+  if (!confirmOverlay.hidden) confirmCancelBtn.click();
+  if (!promptOverlay.hidden) promptCancelBtn.click();
+  if (!filterPanel.hidden) filterPanel.hidden = true;
+  if (!sortPanel.hidden) sortPanel.hidden = true;
 });
 
 todayDateEl.textContent = new Date().toLocaleDateString(undefined, {
@@ -659,7 +881,7 @@ todayDateEl.textContent = new Date().toLocaleDateString(undefined, {
 });
 
 (async function init() {
-  applyTheme(localStorage.getItem("ledger_theme") || "dark");
+  applyTheme(localStorage.getItem("ledger_theme") || "light");
   applyDisplayName(localStorage.getItem("ledger_display_name") || "");
   await loadWorkspaces();
   await loadBoard();
